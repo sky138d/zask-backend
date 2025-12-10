@@ -1,24 +1,25 @@
 // pages/api/chat.js
 import OpenAI from 'openai';
-import { DATA_MAP, ROUTING_GUIDE } from './gameData/index'; // ✨ 수정된 index.js 불러오기
-
-// CORS 설정 (기존과 동일)
-const ALLOWED_ORIGINS = [
-  'https://zask.kr',
-  'https://www.zask.kr',
-  'http://localhost:5173',
-  'https://*.github.dev',
-  'https://*.app.github.dev'
-];
+import { DATA_MAP, ROUTING_GUIDE } from './gameData/index'; 
 
 export default async function handler(req, res) {
-  // --- 1. CORS 처리 (기존과 동일) ---
-  const origin = req.headers.origin;
-  if (origin) res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  // -------------------------------------------------------
+  // 🔓 1. CORS 설정 (문 활짝 열기)
+  // -------------------------------------------------------
+  // 어떤 주소에서 요청하든 무조건 허용합니다. (에러 해결 핵심)
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS, POST, PUT, DELETE');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+
+  // 브라우저의 사전 검사(OPTIONS) 요청은 바로 통과시킵니다.
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  // POST 요청만 처리합니다.
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
   try {
     if (!process.env.OPENAI_API_KEY) throw new Error('OpenAI API Key is missing.');
@@ -59,14 +60,15 @@ export default async function handler(req, res) {
     const systemMessage = {
       role: 'system',
       content: `당신은 'ZASK' 서비스의 **[${selectedContext.name}]** AI입니다.
-      
       아래 **[참고 데이터]**를 최우선으로 하여 유저 질문에 답변하세요.
-      
+      한번 말을 하면 더이상 수정할 수 없으니 신중하게 답변하세요.
+      답변하기 전에 한번 이상 생각하세요.
+
       ---
       [참고 데이터]
       ${selectedContext.data}
       ---
-      
+      KIA타이거즈의 경우 한국어로 기아가 아닌 영어 KIA로. 무조건 이렇게 해줘.
       말투: 친절하고 전문적인 코치처럼. 한국어로.`
     };
 
