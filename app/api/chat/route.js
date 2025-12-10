@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-// 🔥 [핵심 수정] 알려주신 경로에 딱 맞춘 Import 경로
-// route.js가 있는 폴더 안의 gameData 폴더를 찾습니다.
-import { DATA_MAP, ROUTING_GUIDE } from './gameData/index'; 
+// 🔥 [핵심 1] 데이터 파일 불러오기 (경로 중요!)
+// route.js와 같은 폴더 안에 gameData 폴더가 있어야 합니다.
+import { DATA_MAP, ROUTING_GUIDE } from './gameData/index.js'; 
 
-// 1. CORS 설정 (모든 요청 허용)
 export async function OPTIONS() {
   return NextResponse.json({}, {
     status: 200,
@@ -17,13 +16,11 @@ export async function OPTIONS() {
   });
 }
 
-// 2. 실제 채팅 로직
 export async function POST(request) {
   try {
     const body = await request.json();
     const { messages } = body;
 
-    // API 키 확인
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: 'API Key missing' }, { status: 500 });
     }
@@ -32,12 +29,13 @@ export async function POST(request) {
     const userQuestion = messages[messages.length - 1].content;
 
     // -------------------------------------------------------
-    // 🚀 1단계: AI 분류 (어떤 데이터를 참고할지 결정)
+    // 🚀 2단계: AI 라우터 (질문 분류하기)
     // -------------------------------------------------------
+    // 유저의 질문이 "팀 가이드"인지 "스킬"인지 분류합니다.
     const routerResponse = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: ROUTING_GUIDE }, // gameData/index.js에서 가져온 가이드
+        { role: 'system', content: ROUTING_GUIDE }, // gameData에서 가져온 분류 기준
         { role: 'user', content: userQuestion }
       ],
       temperature: 0,
@@ -46,22 +44,23 @@ export async function POST(request) {
 
     let tag = routerResponse.choices[0].message.content.trim().toUpperCase();
     
-    // 분류 실패 시 안전장치
+    // 혹시 분류 못하면 기본값(GENERAL)으로 설정
     if (!DATA_MAP[tag]) {
-      console.log(`⚠️ 분류 태그(${tag})가 데이터에 없음 -> GENERAL로 전환`);
+      console.log(`⚠️ 분류 실패(${tag}) -> GENERAL로 전환`);
       tag = 'GENERAL';
     }
 
     const selectedContext = DATA_MAP[tag];
 
     // -------------------------------------------------------
-    // 🚀 2단계: 최종 답변 생성 (선택된 데이터 기반)
+    // 🚀 3단계: 데이터 주입하여 답변 생성 (제일 중요!)
     // -------------------------------------------------------
     const systemMessage = {
       role: 'system',
       content: `당신은 'ZASK' 서비스의 **[${selectedContext.name}]** AI입니다.
       
-      아래 **[핵심 데이터]**를 반드시 참고하여 답변하세요.
+      반드시 아래 **[핵심 데이터]**를 최우선으로 참고하여 답변하세요.
+      데이터에 있는 내용은 정확하게 전달하고, 없는 내용은 지어내지 마세요.
       
       ---
       [핵심 데이터]
@@ -71,9 +70,10 @@ export async function POST(request) {
       말투: 친절하고 전문적인 야구 코치처럼.`
     };
 
+    // AI에게 "시스템 메시지(데이터) + 유저 대화 내역"을 같이 보냅니다.
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      messages: [systemMessage, ...messages],
+      messages: [systemMessage, ...messages], // 🔥 여기에 데이터가 들어갑니다!
       temperature: 0.3,
       max_tokens: 1500,
     });
@@ -86,7 +86,7 @@ export async function POST(request) {
     });
 
   } catch (error) {
-    console.error('서버 에러 발생:', error);
+    console.error('서버 오류:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
