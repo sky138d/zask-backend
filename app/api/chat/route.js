@@ -1,77 +1,92 @@
 import { NextResponse } from 'next/server';
+import OpenAI from 'openai';
 
-// [진단 1] helper 함수 제거하고 직관적으로 작성
+// 🔥 [핵심 수정] 알려주신 경로에 딱 맞춘 Import 경로
+// route.js가 있는 폴더 안의 gameData 폴더를 찾습니다.
+import { DATA_MAP, ROUTING_GUIDE } from './gameData/index'; 
+
+// 1. CORS 설정 (모든 요청 허용)
 export async function OPTIONS() {
   return NextResponse.json({}, {
     status: 200,
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Date, X-Api-Version',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
   });
 }
 
+// 2. 실제 채팅 로직
 export async function POST(request) {
   try {
     const body = await request.json();
     const { messages } = body;
 
-    // [진단 2] 서버 로그 강제 출력 (Vercel Logs에서 확인용)
-    console.log("✅ API 요청 도착함!");
-    console.log("🔑 API KEY 상태:", process.env.OPENAI_API_KEY ? "존재함 (앞자리: " + process.env.OPENAI_API_KEY.substring(0, 3) + ")" : "❌ 없음");
-
+    // API 키 확인
     if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json({ error: 'OpenAI API Key missing' }, { status: 500 });
+      return NextResponse.json({ error: 'API Key missing' }, { status: 500 });
     }
 
-    // [진단 3] 백틱(`) 대신 문자열 합치기(+) 사용 -> 오타 가능성 0%
-    const authHeader = 'Bearer ' + process.env.OPENAI_API_KEY;
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const userQuestion = messages[messages.length - 1].content;
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': authHeader, // 수정된 헤더 사용
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: messages || [{ role: 'user', content: 'Hello' }],
-        max_tokens: 1000,
-      }),
+    // -------------------------------------------------------
+    // 🚀 1단계: AI 분류 (어떤 데이터를 참고할지 결정)
+    // -------------------------------------------------------
+    const routerResponse = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: ROUTING_GUIDE }, // gameData/index.js에서 가져온 가이드
+        { role: 'user', content: userQuestion }
+      ],
+      temperature: 0,
+      max_tokens: 10,
     });
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error("🔥 OpenAI 에러:", data); // 에러 로그 출력
-      return NextResponse.json(
-        { error: data.error?.message || 'OpenAI Error' },
-        { 
-          status: response.status,
-          headers: { 'Access-Control-Allow-Origin': '*' } // 에러 날 때도 CORS 허용
-        }
-      );
+    let tag = routerResponse.choices[0].message.content.trim().toUpperCase();
+    
+    // 분류 실패 시 안전장치
+    if (!DATA_MAP[tag]) {
+      console.log(`⚠️ 분류 태그(${tag})가 데이터에 없음 -> GENERAL로 전환`);
+      tag = 'GENERAL';
     }
 
-    const reply = data.choices[0].message.content;
+    const selectedContext = DATA_MAP[tag];
 
-    return NextResponse.json(
-      { reply }, 
-      { 
-        status: 200,
-        headers: { 'Access-Control-Allow-Origin': '*' } // 성공 시 CORS 허용
-      }
-    );
+    // -------------------------------------------------------
+    // 🚀 2단계: 최종 답변 생성 (선택된 데이터 기반)
+    // -------------------------------------------------------
+    const systemMessage = {
+      role: 'system',
+      content: `당신은 'ZASK' 서비스의 **[${selectedContext.name}]** AI입니다.
+      
+      아래 **[핵심 데이터]**를 반드시 참고하여 답변하세요.
+      
+      ---
+      [핵심 데이터]
+      ${selectedContext.data}
+      ---
+      
+      말투: 친절하고 전문적인 야구 코치처럼.`
+    };
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [systemMessage, ...messages],
+      temperature: 0.3,
+      max_tokens: 1500,
+    });
+
+    const reply = completion.choices[0].message.content;
+
+    return NextResponse.json({ reply }, { 
+      status: 200,
+      headers: { 'Access-Control-Allow-Origin': '*' } 
+    });
 
   } catch (error) {
-    console.error('💥 서버 내부 오류:', error);
-    return NextResponse.json(
-      { error: 'Internal Server Error', details: error.message },
-      { 
-        status: 500, 
-        headers: { 'Access-Control-Allow-Origin': '*' } // 서버 터져도 CORS 허용
-      }
-    );
+    console.error('서버 에러 발생:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
