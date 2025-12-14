@@ -3,7 +3,7 @@
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import prisma from "../../../../lib/prisma"; // 방금 만든 lib/prisma.js 불러오기
+import prisma from "../../../../lib/prisma";
 
 const handler = NextAuth({
   providers: [
@@ -12,27 +12,25 @@ const handler = NextAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     }),
   ],
-  adapter: PrismaAdapter(prisma), // 로그인하면 자동으로 DB에 유저 저장됨
+  adapter: PrismaAdapter(prisma),
   secret: process.env.NEXTAUTH_SECRET,
-  pages: {
-    signIn: '/api/auth/signin',
-    callback: '/api/auth/callback',
-  },
   callbacks: {
     async redirect({ url, baseUrl }) {
-      // 프론트엔드로 리다이렉트
-      if (url.startsWith('http://localhost') || url.startsWith('https://www.zask.kr') || url.startsWith('https://zask.kr')) {
-        return url;
-      }
-      // loginSuccess 파라미터와 함께 프론트엔드로 돌아가기
-      return `${process.env.NEXTAUTH_URL_FRONTNED || 'https://www.zask.kr'}?loginSuccess=true`;
+      // 콜백 URL이 상대경로면 baseUrl과 합치기
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      // 같은 도메인이면 리다이렉트 허용
+      else if (new URL(url).origin === baseUrl) return url;
+      // 그 외는 프론트엔드 메인 페이지로
+      return `https://www.zask.kr?loginSuccess=true`;
     },
     async session({ session, user }) {
-      // 프론트엔드에서 user.id(DB의 고유 ID)를 쓸 수 있게 넣어줌
       if (session?.user) {
         session.user.id = user.id;
       }
       return session;
+    },
+  },
+});
     },
   },
 });
