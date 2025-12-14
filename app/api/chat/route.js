@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-// 🔥 [핵심 수정] 유저님이 만든 데이터를 여기서 불러옵니다.
-// route.js와 gameData 폴더가 같은 위치에 있으므로 './gameData/index'가 맞습니다.
+// 🔥 gameData 불러오기
 import { DATA_MAP, ROUTING_GUIDE } from './gameData/index'; 
 
-// 1. CORS 설정 (모든 요청 허용 - 빨간 에러 방지)
+// 1. CORS 설정
 export async function OPTIONS() {
   return NextResponse.json({}, {
     status: 200,
@@ -23,47 +22,61 @@ export async function POST(request) {
     const body = await request.json();
     const { messages } = body;
 
-    // API 키 확인
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: 'API Key missing' }, { status: 500 });
     }
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     
-    // 유저의 마지막 질문 추출
-    const userQuestion = messages[messages.length - 1].content;
+    // -------------------------------------------------------
+    // ✨ [핵심 수정] 글로벌 프롬프트 강제 주입
+    // -------------------------------------------------------
+    // 유저의 마지막 메시지를 찾아서 앞에 [V25 게임 질문] 태그를 붙입니다.
+    // 이렇게 하면 AI가 "삼성 18덱"을 절대 반도체로 착각하지 않습니다.
+    const lastIndex = messages.length - 1;
+    const originalContent = messages[lastIndex].content;
+    
+    // "이 질문은 컴투스프로야구V25 게임에 관한 것입니다"라고 명시
+    const enhancedContent = `[컴투스프로야구V25 모바일 게임 관련 질문입니다]\n${originalContent}`;
+
+    // 수정된 메시지 리스트 생성 (기존 대화 내역 + 수정된 마지막 질문)
+    const modifiedMessages = [...messages];
+    modifiedMessages[lastIndex] = { 
+      ...modifiedMessages[lastIndex], 
+      content: enhancedContent 
+    };
 
     // -------------------------------------------------------
-    // 🚀 1단계: AI 분류 (이 질문이 덱 상담인지, 스킬 질문인지 파악)
+    // 🚀 1단계: AI 분류 (수정된 메시지로 판단)
     // -------------------------------------------------------
     const routerResponse = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: ROUTING_GUIDE }, // index.js에서 가져온 분류 가이드
-        { role: 'user', content: userQuestion }
+        { role: 'system', content: ROUTING_GUIDE }, 
+        ...modifiedMessages // 🔥 [수정된 질문]이 들어갑니다.
       ],
       temperature: 0,
-      max_tokens: 20, // 태그만 딱 뱉게 짧게 설정
+      max_tokens: 20,
     });
 
-    // AI가 판단한 태그 (예: "TEAM_LINEUP" or "SKILL")
     let tag = routerResponse.choices[0].message.content.trim().toUpperCase();
     
-    // 만약 이상한 태그가 나오면 안전하게 기본값(GENERAL)으로 처리
     if (!DATA_MAP[tag]) {
       console.log(`⚠️ 분류 실패(${tag}) -> GENERAL로 전환`);
       tag = 'GENERAL';
     }
 
-    // 선택된 데이터 가져오기 (예: 삼성 덱 정보 등)
     const selectedContext = DATA_MAP[tag];
 
     // -------------------------------------------------------
-    // 🚀 2단계: 데이터 주입하여 진짜 답변 만들기 (제일 중요!)
+    // 🚀 2단계: 답변 생성 (수정된 메시지로 답변)
     // -------------------------------------------------------
     const systemMessage = {
       role: 'system',
       content: `당신은 'ZASK' 서비스의 **[${selectedContext.name}]** AI입니다.
+      
+      사용자의 질문은 **'컴투스프로야구V25'** 모바일 야구 게임에 관한 것입니다.
+      절대 반도체, 노래 가사 등 다른 분야로 착각하지 마세요.
       
       반드시 아래 **[핵심 데이터]**를 최우선으로 참고하여 답변하세요.
       데이터에 있는 내용은 정확하게 전달하고, 없는 내용은 지어내지 말고 모른다고 하세요.
@@ -76,12 +89,10 @@ export async function POST(request) {
       말투: 친절하고 전문적인 야구 코치처럼.`
     };
 
-    // AI에게 "데이터(systemMessage) + 유저 질문"을 같이 보냅니다.
-    // 이렇게 해야 AI가 "아, 18덱은 반도체가 아니라 야구덱이구나" 하고 알게 됩니다.
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      messages: [systemMessage, ...messages], 
-      temperature: 0.3, // 데이터를 정확히 읽기 위해 창의성 낮춤
+      messages: [systemMessage, ...modifiedMessages], // 🔥 여기도 [수정된 질문] 사용
+      temperature: 0.3,
       max_tokens: 1500,
     });
 

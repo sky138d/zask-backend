@@ -1,0 +1,113 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url = env("POSTGRES_PRISMA_URL")
+  directUrl = env("POSTGRES_PRISMA_URL")
+}
+
+// 1. 사용자 정보 (로그인용)
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  
+  // 내 팀 정보 (1:1 관계)
+  myTeam        MyTeam?
+}
+
+// 2. 내 팀 정보 (팀 전체 스탯)
+model MyTeam {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // 팀 전체 스탯 (요청하신 부분)
+  totalSetDeckScore Int?     // 팀 전체 세트덱 스코어
+  totalOvr          String?  // 전체 OVR (소수점 표현을 위해 String 권장)
+  
+  // 선수단 명단 (1:N 관계 - 팀 하나에 선수 여러 명)
+  players           Player[]
+
+  updatedAt         DateTime @updatedAt
+}
+
+// 3. 개별 선수 정보 (요청하신 디테일 전부 포함)
+model Player {
+  id             String  @id @default(cuid())
+  
+  // 어떤 팀 소속인지 연결
+  myTeamId       String
+  myTeam         MyTeam  @relation(fields: [myTeamId], references: [id], onDelete: Cascade)
+
+  // 1. 포지션 (필수) 
+  // 들어갈 값 예시: "SP1", "SP2", "RP1", "DH", "1B", "CF" 등
+  position       String  
+
+  // 2. 기본 정보
+  name           String  // 선수명
+  cardType       String  // 카드 종류 (시그, 임팩, 골글 등)
+  year           String  // 연도 (일반연도 또는 임팩트는 'I')
+
+  // 3. 육성 상태 (숫자)
+  upgradeLevel   Int     // 강화단계
+  trainingLevel  Int     // 훈련단계
+  awakeningLevel Int     // 각성단계
+
+  // 4. 스킬 (3개)
+  skill1         String? // 스킬1
+  skill2         String?
+  skill3         String?
+
+  // 5. 잠재력 (3개)
+  potential1     String? // 잠재력1
+  potential2     String?
+  potential3     String?
+
+  // 6. 개별 스코어
+  playerSetDeckScore Int? // 선수별 세트덱 스코어
+}
+
+// --- NextAuth 필수 테이블 (변경 없음) ---
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
