@@ -14,20 +14,22 @@ const handler = NextAuth({
   ],
   adapter: PrismaAdapter(prisma),
   secret: process.env.NEXTAUTH_SECRET,
-  pages: {
-    signIn: '/api/auth/signin',
+  // Ensure cookies are set for the root domain so subdomains (www/api) can share them
+  cookies: {
+    sessionToken: {
+      name: process.env.NEXTAUTH_COOKIE_NAME || 'next-auth.session-token',
+      options: {
+        domain: process.env.COOKIE_DOMAIN || '.zask.kr',
+        path: '/',
+        httpOnly: true,
+        sameSite: 'none',
+        secure: true,
+      },
+    },
   },
   callbacks: {
-    async redirect({ url, baseUrl }) {
-      // 상대경로 처리
-      if (url.startsWith("/")) return `${baseUrl}${url}`;
-      // 같은 도메인 처리
-      else if (new URL(url).origin === baseUrl) return url;
-      // 프론트엔드로 리다이렉트
-      return `https://www.zask.kr`;
-    },
+    // Use default redirect behavior (don't force custom redirects here)
     async session({ session, user }) {
-      // 프론트엔드에서 user.id를 사용할 수 있도록 추가
       if (session?.user) {
         session.user.id = user.id;
       }
