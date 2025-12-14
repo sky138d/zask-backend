@@ -14,7 +14,19 @@ const handler = NextAuth({
   ],
   adapter: PrismaAdapter(prisma), // 로그인하면 자동으로 DB에 유저 저장됨
   secret: process.env.NEXTAUTH_SECRET,
+  pages: {
+    signIn: '/api/auth/signin',
+    callback: '/api/auth/callback',
+  },
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      // 프론트엔드로 리다이렉트
+      if (url.startsWith('http://localhost') || url.startsWith('https://www.zask.kr') || url.startsWith('https://zask.kr')) {
+        return url;
+      }
+      // loginSuccess 파라미터와 함께 프론트엔드로 돌아가기
+      return `${process.env.NEXTAUTH_URL_FRONTNED || 'https://www.zask.kr'}?loginSuccess=true`;
+    },
     async session({ session, user }) {
       // 프론트엔드에서 user.id(DB의 고유 ID)를 쓸 수 있게 넣어줌
       if (session?.user) {
