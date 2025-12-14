@@ -28,7 +28,19 @@ const handler = NextAuth({
     },
   },
   callbacks: {
-    // Use default redirect behavior (don't force custom redirects here)
+    // Redirect to the frontend site after sign in to avoid landing on API root (which 404s)
+    async redirect({ url, baseUrl }) {
+      const FRONTEND = process.env.NEXTAUTH_URL_FRONTEND || 'https://www.zask.kr';
+      try {
+        if (url && url.startsWith('/')) return `${FRONTEND}${url}`;
+        const parsed = new URL(url || '');
+        // If the url origin equals the API baseUrl, redirect to frontend preserving path
+        if (parsed.origin === baseUrl) return `${FRONTEND}${parsed.pathname}${parsed.search}`;
+      } catch (e) {
+        // fallback
+      }
+      return FRONTEND;
+    },
     async session({ session, user }) {
       if (session?.user) {
         session.user.id = user.id;
