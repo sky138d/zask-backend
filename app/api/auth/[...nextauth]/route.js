@@ -5,80 +5,47 @@ import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import prisma from "../../../../lib/prisma";
 
-const handler = NextAuth({
+export const authOptions = {
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      allowDangerousEmailAccountLinking: true,
     }),
   ],
   adapter: PrismaAdapter(prisma),
   secret: process.env.NEXTAUTH_SECRET,
-  // Ensure cookies are set for the root domain so subdomains (www/api) can share them
+  session: {
+    strategy: "database",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  },
   cookies: {
     sessionToken: {
-      name: process.env.NEXTAUTH_COOKIE_NAME || 'next-auth.session-token',
+      name: `next-auth.session-token`,
       options: {
-        domain: process.env.COOKIE_DOMAIN || '.zask.kr',
-        path: '/',
         httpOnly: true,
-        sameSite: 'none',
-        secure: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
       },
     },
   },
   callbacks: {
-    // Redirect to the frontend site after sign in to avoid landing on API root (which 404s)
     async redirect({ url, baseUrl }) {
-      const FRONTEND = process.env.NEXTAUTH_URL_FRONTEND || 'https://www.zask.kr';
-      try {
-        if (url && url.startsWith('/')) return `${FRONTEND}${url}`;
-        const parsed = new URL(url || '');
-        // If the url origin equals the API baseUrl, redirect to frontend preserving path
-        if (parsed.origin === baseUrl) return `${FRONTEND}${parsed.pathname}${parsed.search}`;
-      } catch (e) {
-        // fallback
-      }
-      return FRONTEND;
+      if (url.startsWith('/')) return `${baseUrl}${url}`;
+      else if (new URL(url).origin === baseUrl) return url;
+      return process.env.NEXTAUTH_URL_FRONTEND || 'https://www.zask.kr';
     },
     async session({ session, user }) {
-      if (session?.user) {
-        session.user.id = user.id;
-      }
+      session.user.id = user.id;
       return session;
     },
   },
-});
-
-export const authOptions = handler;
-
-// CORS wrapper for NextAuth
-const corsHeaders = {
-  'Access-Control-Allow-Origin': 'https://www.zask.kr',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Access-Control-Allow-Credentials': 'true',
+  pages: {
+    signIn: '/auth/signin',
+    error: '/auth/error',
+  },
 };
 
-async function corsHandler(req) {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 200,
-      headers: corsHeaders,
-    });
-  }
-  
-  const response = await handler(req);
-  const newResponse = new Response(response.body, response);
-  Object.entries(corsHeaders).forEach(([key, value]) => {
-    newResponse.headers.set(key, value);
-  });
-  return newResponse;
-}
-
-export const GET = corsHandler;
-export const POST = corsHandler;
-export const OPTIONS = async () => new Response(null, {
-  status: 200,
-  headers: corsHeaders,
-});
+const handler = NextAuth(authOptions);
+export { handler as GET, handler as POST };
