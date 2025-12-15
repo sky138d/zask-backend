@@ -51,4 +51,34 @@ const handler = NextAuth({
 });
 
 export const authOptions = handler;
-export { handler as GET, handler as POST };
+
+// CORS wrapper for NextAuth
+const corsHeaders = {
+  'Access-Control-Allow-Origin': 'https://www.zask.kr',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Credentials': 'true',
+};
+
+async function corsHandler(req) {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 200,
+      headers: corsHeaders,
+    });
+  }
+  
+  const response = await handler(req);
+  const newResponse = new Response(response.body, response);
+  Object.entries(corsHeaders).forEach(([key, value]) => {
+    newResponse.headers.set(key, value);
+  });
+  return newResponse;
+}
+
+export const GET = corsHandler;
+export const POST = corsHandler;
+export const OPTIONS = async () => new Response(null, {
+  status: 200,
+  headers: corsHeaders,
+});
