@@ -8,6 +8,20 @@ export async function GET(req) {
   if (!connString) {
     return NextResponse.json({ ok: false, error: 'Database connection string not configured' }, { status: 500 });
   }
+  // Parse and sanitize connection info for debugging without revealing password
+  let sanitized = {};
+  try {
+    const u = new URL(connString);
+    sanitized = {
+      protocol: u.protocol.replace(':',''),
+      user: u.username || null,
+      host: u.hostname || null,
+      port: u.port || null,
+      database: (u.pathname || '').replace(/\//g, '') || null,
+    };
+  } catch (e) {
+    sanitized = { raw: connString.substring(0, 80) };
+  }
 
   let client;
   try {
@@ -21,6 +35,7 @@ export async function GET(req) {
 
     return NextResponse.json({
       ok: true,
+      connection: sanitized,
       user: userRes.rows?.[0]?.current_user ?? null,
       cards_minimal_count: countRes.rows?.[0]?.cnt ?? null,
     });
@@ -28,8 +43,8 @@ export async function GET(req) {
     if (client) {
       try { await client.end(); } catch (e) {}
     }
-    // 에러 메시지는 진단 용도로만 반환합니다 (운영 후 삭제 권장)
-    return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
+    // Return sanitized connection info along with error for diagnosis
+    return NextResponse.json({ ok: false, error: err.message, connection: sanitized }, { status: 500 });
   }
 }
 
