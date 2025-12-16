@@ -1,1 +1,7 @@
-{}
+{
+  "/api/chat/route": "app/api/chat/route.js",
+  "/api/email/route": "app/api/email/route.js",
+  "/api/user/team/route": "app/api/user/team/route.js",
+  "/api/search/players/route": "app/api/search/players/route.js",
+  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js"
+}

@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 
 export function middleware(request) {
   const origin = request.headers.get('origin') || '';
-  const allowedOrigins = new Set([
+	const allowedOrigins = new Set([
     'https://www.zask.kr',
+    'https://api.zask.kr',
     'http://localhost:5173',
   ]);
 
