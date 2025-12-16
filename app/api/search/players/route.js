@@ -31,30 +31,34 @@ export async function GET(req) {
     const qParam = `%${q}%`;
     const res = await client.query(sql, [qParam, q, limit, offset]);
     await client.end();
-    return NextResponse.json({ results: res.rows }, { 
-      headers: { 
-        'Access-Control-Allow-Origin': '*',
+
+    const origin = req.headers.get('origin') || '*';
+    return NextResponse.json({ results: res.rows }, {
+      headers: {
+        'Access-Control-Allow-Origin': origin,
         'Access-Control-Allow-Credentials': 'true'
-      } 
+      }
     });
   } catch (err) {
     console.error('search players error', err);
-    return NextResponse.json({ error: 'Server error', details: err.message }, { 
-      status: 500, 
-      headers: { 
-        'Access-Control-Allow-Origin': '*',
+    const origin = req.headers.get('origin') || '*';
+    return NextResponse.json({ error: 'Server error', details: err.message }, {
+      status: 500,
+      headers: {
+        'Access-Control-Allow-Origin': origin,
         'Access-Control-Allow-Credentials': 'true'
-      } 
+      }
     });
   }
 }
 
-export async function OPTIONS() {
+export async function OPTIONS(req) {
   // respond to preflight
+  const origin = req.headers.get('origin') || '*';
   return new NextResponse(null, {
     status: 204,
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': origin,
       'Access-Control-Allow-Methods': 'GET,OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey',
       'Access-Control-Allow-Credentials': 'true'
