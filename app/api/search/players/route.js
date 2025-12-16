@@ -23,7 +23,7 @@ export async function GET(req) {
     // Use similarity ordering from pg_trgm
     const sql = `
       SELECT name, type, subtype, team, year, position, ovr
-      FROM cards_minimal
+      FROM public.cards_minimal
       WHERE name ILIKE $1
       ORDER BY similarity(name, $2) DESC
       LIMIT $3 OFFSET $4
